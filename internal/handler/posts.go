@@ -13,8 +13,8 @@ type Posts struct {
 	Title     string    `json:"title"`
 	Content   string    `json:"content"`
 	Category  string    `json:"category"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	CreatedAt time.Time `json:"created_date"`
+	UpdatedAt time.Time `json:"updated_date"`
 	Status    string    `json:"status"`
 }
 
@@ -23,7 +23,7 @@ type PostsHandler struct {
 }
 
 func (h *PostsHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.DB.Query("SELECT id, title, content, category, created_at, updated_at, status FROM posts")
+	rows, err := h.DB.Query("SELECT id, title, content, category, created_date, updated_date, status FROM posts")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -57,7 +57,7 @@ func (h *PostsHandler) GetPostByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	row := h.DB.QueryRow("SELECT id, title, content, category, created_at, updated_at, status FROM posts WHERE id = ?", id)
+	row := h.DB.QueryRow("SELECT id, title, content, category, created_date, updated_date, status FROM posts WHERE id = ?", id)
 	var p Posts
 	if err := row.Scan(&p.ID, &p.Title, &p.Content, &p.Category, &p.CreatedAt, &p.UpdatedAt, &p.Status); err != nil {
 		if err == sql.ErrNoRows {
@@ -79,7 +79,7 @@ func (h *PostsHandler) CreatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.DB.Exec("INSERT INTO posts (title, content, category, created_at, updated_at, status) VALUES (?, ?, ?, ?, ?, ?)",
+	result, err := h.DB.Exec("INSERT INTO posts (title, content, category, created_date, updated_date, status) VALUES (?, ?, ?, ?, ?, ?)",
 		p.Title, p.Content, p.Category, p.CreatedAt, p.UpdatedAt, p.Status)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -112,7 +112,7 @@ func (h *PostsHandler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.DB.Exec("UPDATE posts SET title = ?, content = ?, category = ?, created_at = ?, updated_at = ?, status = ? WHERE id = ?",
+	_, err = h.DB.Exec("UPDATE posts SET title = ?, content = ?, category = ?, created_date = ?, updated_date = ?, status = ? WHERE id = ?",
 		p.Title, p.Content, p.Category, p.CreatedAt, p.UpdatedAt, p.Status, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
