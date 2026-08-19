@@ -5,18 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
-	"time"
+	"github.com/Sucip70/SVTest-demo-be/internal/model"
+	"fmt"
 )
-
-type Posts struct {
-	ID        int       `json:"id"`
-	Title     string    `json:"title"`
-	Content   string    `json:"content"`
-	Category  string    `json:"category"`
-	CreatedAt time.Time `json:"created_date"`
-	UpdatedAt time.Time `json:"updated_date"`
-	Status    string    `json:"status"`
-}
 
 type PostsHandler struct {
 	DB *sql.DB
@@ -30,9 +21,9 @@ func (h *PostsHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	posts := []Posts{}
+	posts := []model.Posts{}
 	for rows.Next() {
-		var p Posts
+		var p model.Posts
 		if err := rows.Scan(&p.ID, &p.Title, &p.Content, &p.Category, &p.CreatedAt, &p.UpdatedAt, &p.Status); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -58,7 +49,7 @@ func (h *PostsHandler) GetPostByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	row := h.DB.QueryRow("SELECT id, title, content, category, created_date, updated_date, status FROM posts WHERE id = ?", id)
-	var p Posts
+	var p model.Posts
 	if err := row.Scan(&p.ID, &p.Title, &p.Content, &p.Category, &p.CreatedAt, &p.UpdatedAt, &p.Status); err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Post not found", http.StatusNotFound)
@@ -73,55 +64,62 @@ func (h *PostsHandler) GetPostByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PostsHandler) CreatePost(w http.ResponseWriter, r *http.Request) {
-	var p Posts
+	var p model.CreatePostRequest
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	result, err := h.DB.Exec("INSERT INTO posts (title, content, category, created_date, updated_date, status) VALUES (?, ?, ?, ?, ?, ?)",
-		p.Title, p.Content, p.Category, p.CreatedAt, p.UpdatedAt, p.Status)
+	err := p.Validate()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	id, err := result.LastInsertId()
+	_, err = h.DB.Exec(`
+		INSERT INTO posts (title, content, category, created_date, updated_date, status) 
+		VALUES (?, ?, ?, NOW(), NOW(), ?)`,
+		p.Title, p.Content, p.Category, p.Status)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	p.ID = int(id)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(p)
+	json.NewEncoder(w).Encode(model.CreatePostResponse{Message: "Post created successfully"})
 }
 
 func (h *PostsHandler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 	idStr := r.URL.Query().Get("id")
 	id, err := strconv.Atoi(idStr)
+	fmt.Println(id)
 	if err != nil {
 		http.Error(w, "Invalid post ID", http.StatusBadRequest)
 		return
 	}
 
-	var p Posts
+	var p model.UpdatePostRequest
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	_, err = h.DB.Exec("UPDATE posts SET title = ?, content = ?, category = ?, created_date = ?, updated_date = ?, status = ? WHERE id = ?",
-		p.Title, p.Content, p.Category, p.CreatedAt, p.UpdatedAt, p.Status, id)
+	err = p.ValidateUpdate()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	_, err = h.DB.Exec("UPDATE posts SET title = ?, content = ?, category = ? WHERE id = ?",
+		p.Title, p.Content, p.Category, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	p.ID = id
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(p)
+	json.NewEncoder(w).Encode(model.UpdatePostResponse{Message: "Post updated successfully"})
 }
 
 func (h *PostsHandler) UpdatePostStatus(w http.ResponseWriter, r *http.Request) {
@@ -132,11 +130,15 @@ func (h *PostsHandler) UpdatePostStatus(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var status struct {
-		Status string `json:"status"`
-	}
+	var status model.UpdatePostStatusRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&status); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	
+	err = status.ValidateStatus()
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -147,5 +149,6 @@ func (h *PostsHandler) UpdatePostStatus(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(model.UpdatePostStatusResponse{Message: "Post status updated successfully"})
 }
