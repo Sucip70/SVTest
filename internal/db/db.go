@@ -1,6 +1,8 @@
 package db
 
 import (
+	"log"
+
 	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/golang-migrate/migrate/v4"

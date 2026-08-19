@@ -1,4 +1,4 @@
-CREATE TABLE `posts` (
+CREATE TABLE IF NOT EXISTS `posts` (
   `Id` int unsigned NOT NULL AUTO_INCREMENT,
   `Title` varchar(200) DEFAULT NULL,
   `Content` text,
