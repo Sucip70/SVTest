@@ -3,10 +3,12 @@ package handler
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
+
 	"github.com/Sucip70/SVTest-demo-be/internal/model"
-	"fmt"
 )
 
 type PostsHandler struct {
@@ -14,7 +16,65 @@ type PostsHandler struct {
 }
 
 func (h *PostsHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.DB.Query("SELECT id, title, content, category, created_date, updated_date, status FROM posts")
+	query := strings.Builder{}
+	query.WriteString("SELECT id, title, content, category, created_date, updated_date, status FROM posts")
+	conditions := make([]string, 0, 5)
+	args := make([]any, 0, 5)
+
+	if title := r.URL.Query().Get("title"); title != "" {
+		conditions = append(conditions, "title LIKE ?")
+		args = append(args, "%"+title+"%")
+	}
+	if content := r.URL.Query().Get("content"); content != "" {
+		conditions = append(conditions, "content LIKE ?")
+		args = append(args, "%"+content+"%")
+	}
+	if status := r.URL.Query().Get("status"); status != "" {
+		conditions = append(conditions, "status = ?")
+		args = append(args, status)
+	}
+	if category := r.URL.Query().Get("category"); category != "" {
+		conditions = append(conditions, "category = ?")
+		args = append(args, category)
+	}
+	if createdDate := r.URL.Query().Get("created_date"); createdDate != "" {
+		conditions = append(conditions, "DATE(created_date) = ?")
+		args = append(args, createdDate)
+	}
+
+	if len(conditions) > 0 {
+		query.WriteString(" WHERE ")
+		query.WriteString(strings.Join(conditions, " AND "))
+	}
+
+	sortColumns := map[string]string{
+		"title":        "title",
+		"content":      "content",
+		"status":       "status",
+		"category":     "category",
+		"created_date": "created_date",
+	}
+	sortBy := r.URL.Query().Get("sort_by")
+	if sortBy == "" {
+		sortBy = "created_date"
+	}
+	sortColumn, ok := sortColumns[sortBy]
+	if !ok {
+		writeError(w, http.StatusBadRequest, "Invalid sort field")
+		return
+	}
+
+	sortOrder := strings.ToUpper(r.URL.Query().Get("sort_order"))
+	if sortOrder == "" {
+		sortOrder = "DESC"
+	}
+	if sortOrder != "ASC" && sortOrder != "DESC" {
+		writeError(w, http.StatusBadRequest, "Invalid sort order")
+		return
+	}
+
+	query.WriteString(fmt.Sprintf(" ORDER BY %s %s", sortColumn, sortOrder))
+	rows, err := h.DB.Query(query.String(), args...)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to retrieve posts")
 		return
