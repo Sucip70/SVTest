@@ -16,7 +16,7 @@ type PostsHandler struct {
 func (h *PostsHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.DB.Query("SELECT id, title, content, category, created_date, updated_date, status FROM posts")
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "Failed to retrieve posts")
 		return
 	}
 	defer rows.Close()
@@ -25,18 +25,17 @@ func (h *PostsHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var p model.Posts
 		if err := rows.Scan(&p.ID, &p.Title, &p.Content, &p.Category, &p.CreatedAt, &p.UpdatedAt, &p.Status); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, "Failed to retrieve posts")
 			return
 		}
 		posts = append(posts, p)
 	}
 	if err := rows.Err(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "Failed to retrieve posts")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(posts)
+	writeJSON(w, http.StatusOK, posts)
 }
 
 func (h *PostsHandler) GetPostByID(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +43,7 @@ func (h *PostsHandler) GetPostByID(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(idStr)
 
 	if err != nil {
-		http.Error(w, "Invalid post ID", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "Invalid post ID")
 		return
 	}
 
@@ -52,27 +51,26 @@ func (h *PostsHandler) GetPostByID(w http.ResponseWriter, r *http.Request) {
 	var p model.Posts
 	if err := row.Scan(&p.ID, &p.Title, &p.Content, &p.Category, &p.CreatedAt, &p.UpdatedAt, &p.Status); err != nil {
 		if err == sql.ErrNoRows {
-			http.Error(w, "Post not found", http.StatusNotFound)
+			writeError(w, http.StatusNotFound, "Post not found")
 		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeError(w, http.StatusInternalServerError, "Failed to retrieve post")
 		}
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(p)
+	writeJSON(w, http.StatusOK, p)
 }
 
 func (h *PostsHandler) CreatePost(w http.ResponseWriter, r *http.Request) {
 	var p model.CreatePostRequest
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "Invalid request payload")
 		return
 	}
 
 	err := p.Validate()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -81,13 +79,11 @@ func (h *PostsHandler) CreatePost(w http.ResponseWriter, r *http.Request) {
 		VALUES (?, ?, ?, NOW(), NOW(), ?)`,
 		p.Title, p.Content, p.Category, p.Status)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "Failed to create post")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(model.CreatePostResponse{Message: "Post created successfully"})
+	writeJSON(w, http.StatusCreated, model.CreatePostResponse{Message: "Post created successfully"})
 }
 
 func (h *PostsHandler) UpdatePost(w http.ResponseWriter, r *http.Request) {
@@ -95,60 +91,70 @@ func (h *PostsHandler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(idStr)
 	fmt.Println(id)
 	if err != nil {
-		http.Error(w, "Invalid post ID", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "Invalid post ID")
 		return
 	}
 
 	var p model.UpdatePostRequest
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "Invalid request payload")
 		return
 	}
 
 	err = p.ValidateUpdate()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	_, err = h.DB.Exec("UPDATE posts SET title = ?, content = ?, category = ? WHERE id = ?",
 		p.Title, p.Content, p.Category, id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "Failed to update post")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(model.UpdatePostResponse{Message: "Post updated successfully"})
+	writeJSON(w, http.StatusOK, model.UpdatePostResponse{Message: "Post updated successfully"})
 }
 
 func (h *PostsHandler) UpdatePostStatus(w http.ResponseWriter, r *http.Request) {
 	idStr := r.URL.Query().Get("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		http.Error(w, "Invalid post ID", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "Invalid post ID")
 		return
 	}
 
 	var status model.UpdatePostStatusRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&status); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "Invalid request payload")
 		return
 	}
 	
 	err = status.ValidateStatus()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	_, err = h.DB.Exec("UPDATE posts SET status = ? WHERE id = ?", status.Status, id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "Failed to update post status")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(model.UpdatePostStatusResponse{Message: "Post status updated successfully"})
+	writeJSON(w, http.StatusOK, model.UpdatePostStatusResponse{Message: "Post status updated successfully"})
+}
+
+func writeJSON(w http.ResponseWriter, status int, response interface{}) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(status)
+    json.NewEncoder(w).Encode(response)
+}
+
+func writeError(w http.ResponseWriter, status int, message string) {
+    writeJSON(w, status, model.APIResponse{
+        Message: message,
+    })
 }
