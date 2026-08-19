@@ -42,14 +42,34 @@ func main() {
 		w.Write([]byte("OK"))
 	})
 
+	handler := corsMiddleware(mux)
+
 	port := cfg.Port
 	if port == "" {
 		port = "8080"
 	}
 
 	log.Printf("Server is running on :%s", port)
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
+	if err := http.ListenAndServe(":"+port, handler); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Origin") == "https://sucip70.github.io" {
+			w.Header().Set("Access-Control-Allow-Origin", "https://sucip70.github.io")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Vary", "Origin")
+		}
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
