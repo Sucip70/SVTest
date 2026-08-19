@@ -16,8 +16,6 @@ type PostsHandler struct {
 }
 
 func (h *PostsHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
-	query := strings.Builder{}
-	query.WriteString("SELECT id, title, content, category, created_date, updated_date, status FROM posts")
 	conditions := make([]string, 0, 5)
 	args := make([]any, 0, 5)
 
@@ -42,9 +40,36 @@ func (h *PostsHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 		args = append(args, createdDate)
 	}
 
+	whereClause := ""
 	if len(conditions) > 0 {
-		query.WriteString(" WHERE ")
-		query.WriteString(strings.Join(conditions, " AND "))
+		whereClause = " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	page := 1
+	if value := r.URL.Query().Get("page"); value != "" {
+		parsedPage, err := strconv.Atoi(value)
+		if err != nil || parsedPage < 1 {
+			writeError(w, http.StatusBadRequest, "Invalid page")
+			return
+		}
+		page = parsedPage
+	}
+
+	limit := 10
+	if value := r.URL.Query().Get("limit"); value != "" {
+		parsedLimit, err := strconv.Atoi(value)
+		if err != nil || parsedLimit < 1 || parsedLimit > 100 {
+			writeError(w, http.StatusBadRequest, "Invalid limit")
+			return
+		}
+		limit = parsedLimit
+	}
+
+	var total int
+	countQuery := "SELECT COUNT(*) FROM posts" + whereClause
+	if err := h.DB.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to retrieve posts")
+		return
 	}
 
 	sortColumns := map[string]string{
@@ -73,8 +98,12 @@ func (h *PostsHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query.WriteString(fmt.Sprintf(" ORDER BY %s %s", sortColumn, sortOrder))
-	rows, err := h.DB.Query(query.String(), args...)
+	query := strings.Builder{}
+	query.WriteString("SELECT id, title, content, category, created_date, updated_date, status FROM posts")
+	query.WriteString(whereClause)
+	query.WriteString(fmt.Sprintf(" ORDER BY %s %s LIMIT ? OFFSET ?", sortColumn, sortOrder))
+	queryArgs := append(args, limit, (page-1)*limit)
+	rows, err := h.DB.Query(query.String(), queryArgs...)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to retrieve posts")
 		return
@@ -95,7 +124,16 @@ func (h *PostsHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, posts)
+	totalPages := (total + limit - 1) / limit
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": posts,
+		"pagination": map[string]int{
+			"page":        page,
+			"limit":       limit,
+			"total":       total,
+			"total_pages": totalPages,
+		},
+	})
 }
 
 func (h *PostsHandler) GetPostByID(w http.ResponseWriter, r *http.Request) {
@@ -191,7 +229,7 @@ func (h *PostsHandler) UpdatePostStatus(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "Invalid request payload")
 		return
 	}
-	
+
 	err = status.ValidateStatus()
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -208,13 +246,13 @@ func (h *PostsHandler) UpdatePostStatus(w http.ResponseWriter, r *http.Request) 
 }
 
 func writeJSON(w http.ResponseWriter, status int, response interface{}) {
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(status)
-    json.NewEncoder(w).Encode(response)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(response)
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {
-    writeJSON(w, status, model.APIResponse{
-        Message: message,
-    })
+	writeJSON(w, status, model.APIResponse{
+		Message: message,
+	})
 }

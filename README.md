@@ -56,13 +56,29 @@ Sorting is controlled by:
 
 - `sort_by`: `title`, `content`, `status`, `category`, or `created_date`
 - `sort_order`: `asc` or `desc`
+- `page`: page number, starting at `1`
+- `limit`: number of posts per page, from `1` to `100`
 
-The default sort is `created_date desc`.
+The default page is `1`, the default limit is `10`, and the default sort is `created_date desc`.
 
 Example:
 
 ```text
 GET /posts?status=Publish&category=tech&sort_by=title&sort_order=asc
+```
+
+The response includes the posts in `data` and the pagination details in `pagination`:
+
+```json
+{
+  "data": [],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 0,
+    "total_pages": 0
+  }
+}
 ```
 
 ### Create a Post
