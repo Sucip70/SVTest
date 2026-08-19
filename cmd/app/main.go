@@ -42,8 +42,13 @@ func main() {
 		w.Write([]byte("OK"))
 	})
 
-	log.Println("Server is running on :8080")
-	if err := http.ListenAndServe(":8080", mux); err != nil {
+	port := cfg.Port
+	if port == "" {
+		port = "8080"
+	}
+
+	log.Printf("Server is running on :%s", port)
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
